@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nmaprun scanner="nmap" args="fixture" start="0" version="7.94" xmloutputversion="1.05">
+  <host starttime="0" endtime="1">
+    <status state="up" reason="user-set" reason_ttl="0"/>
+    <ports>
+      <port protocol="tcp" portid="21"><state state="open" reason="syn-ack" reason_ttl="64"/><service name="ftp" method="table" conf="3"/></port>
+      <port protocol="tcp" portid="22"><state state="open" reason="syn-ack" reason_ttl="64"/><service name="ssh" product="Example SSH" version="1.0" method="probed" conf="10"/></port>
+      <port protocol="tcp" portid="23"><state state="open" reason="syn-ack" reason_ttl="64"/><service name="telnet" method="table" conf="3"/></port>
+      <port protocol="tcp" portid="53"><state state="open" reason="syn-ack" reason_ttl="64"/><service name="domain" method="table" conf="3"/></port>
+      <port protocol="tcp" portid="80"><state state="open" reason="syn-ack" reason_ttl="64"/><service name="http" product="Example HTTP" method="probed" conf="10"/></port>
+      <port protocol="tcp" portid="443"><state state="open" reason="syn-ack" reason_ttl="64"/><service name="https" method="table" conf="3"/></port>
+      <port protocol="tcp" portid="8080"><state state="open" reason="syn-ack" reason_ttl="64"/><service name="http-proxy" method="table" conf="3"/></port>
+      <port protocol="tcp" portid="8443"><state state="open" reason="syn-ack" reason_ttl="64"/><service name="https-alt" method="table" conf="3"/></port>
+      <port protocol="tcp" portid="7547"><state state="open" reason="syn-ack" reason_ttl="64"/><service name="cwmp" method="table" conf="3"/></port>
+      <port protocol="tcp" portid="2323"><state state="open" reason="syn-ack" reason_ttl="64"/><service name="unknown" method="table" conf="3"/></port>
+    </ports>
+  </host>
+  <runstats><finished time="1" elapsed="1.00" exit="success"/><hosts up="1" down="0" total="1"/></runstats>
+</nmaprun>

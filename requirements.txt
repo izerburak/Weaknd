@@ -1,0 +1,5 @@
+# weaknd currently has no mandatory third-party Python dependencies.
+#
+# The application uses the Python standard library and invokes optional system
+# tools such as Nmap, Nikto, Nuclei, RouterSploit, tcpdump, and TShark.
+# See README.md for installation and configuration instructions.

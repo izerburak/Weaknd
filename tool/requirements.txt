@@ -1,0 +1,2 @@
+# Kept for users who run pip from the tool/ directory.
+-r ../requirements.txt

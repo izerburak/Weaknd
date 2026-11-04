@@ -1,0 +1,1289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>weaknd — CPE attack surface</title>
+<style>
+  :root{
+    --bg:#0a0e14; --panel:#0f141c; --panel2:#131a24; --line:#1e2733;
+    --fg:#d7e0ea; --dim:#6b7a8d; --accent:#3ad17f; --cyan:#35c6e8;
+    --warn:#f0b429; --danger:#ff5f6d; --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--mono);font-size:14px}
+  body{min-height:100vh;padding:18px;background-image:radial-gradient(circle at 20% -10%,#10212a 0,transparent 45%)}
+  a{color:var(--cyan)}
+  .wrap{max-width:1040px;margin:0 auto}
+
+  header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+  .brand{font-size:22px;font-weight:700;letter-spacing:.5px}
+  .brand b{color:var(--accent)}
+  .tag{color:var(--dim);font-size:12px}
+  .spacer{flex:1}
+  .mode{font-size:11px;font-weight:700;color:var(--accent);border:1px solid var(--accent);
+    background:#102015;border-radius:14px;padding:5px 9px}
+
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:14px}
+  .tabbtn{background:transparent;border:0;border-bottom:2px solid transparent;color:var(--dim);
+    font-family:var(--mono);font-weight:700;padding:10px 14px;cursor:pointer}
+  .tabbtn:hover{color:var(--fg)}
+  .tabbtn.active{color:var(--cyan);border-bottom-color:var(--cyan)}
+  .tabview{display:none}.tabview.active{display:block}
+
+  .controls{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+  .controltitle{font-size:11px;font-weight:700;letter-spacing:.7px;color:var(--dim);margin-right:auto}
+  .controltitle.discovery-title{color:var(--cyan)}
+  .controltitle.audit-title{color:var(--accent)}
+
+  .bar{display:flex;gap:8px;align-items:center;background:var(--panel);border:1px solid var(--line);
+       border-radius:10px;padding:8px 10px;flex-wrap:wrap}
+  .bar input[type=text],.bar select{background:#060a0f;border:1px solid var(--line);color:var(--fg);
+       font-family:var(--mono);padding:8px 10px;border-radius:7px;width:180px;outline:none}
+  .bar select{width:auto}
+  .bar input:focus{border-color:var(--accent)}
+  .lanoptions{display:flex;flex-direction:column;align-items:flex-start;gap:7px}
+  .btn{background:var(--accent);color:#04210f;border:none;font-family:var(--mono);font-weight:700;
+       padding:9px 16px;border-radius:7px;cursor:pointer}
+  .btn.secondary{background:#102832;color:var(--cyan);border:1px solid var(--cyan)}
+  .btn.warn{background:#2a2410;color:var(--warn);border:1px solid var(--warn)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .chk{color:var(--dim);font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer}
+  @media(max-width:900px){.controls{grid-template-columns:1fr}.bar{justify-content:flex-start}}
+
+  /* pipeline rail */
+  .rail{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:16px 0}
+  .step{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;position:relative;overflow:hidden}
+  .step .no{color:var(--dim);font-size:11px}
+  .step .nm{font-weight:700;margin-top:2px}
+  .step .st{font-size:11px;margin-top:6px;color:var(--dim)}
+  .step.run{border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan) inset}
+  .step.done{border-color:var(--accent)}
+  .step.run .st{color:var(--cyan)} .step.done .st{color:var(--accent)}
+  .step .dot{position:absolute;top:12px;right:12px;width:9px;height:9px;border-radius:50%;background:#2a3542}
+  .step.run .dot{background:var(--cyan);animation:pulse 1s infinite}
+  .step.done .dot{background:var(--accent)}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+
+  .grid{display:grid;grid-template-columns:320px 1fr;gap:14px}
+  @media(max-width:760px){.grid{grid-template-columns:1fr}.rail{grid-template-columns:repeat(2,1fr)}}
+  .sev{font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;margin-right:6px}
+  .sev.CRITICAL{background:#3a0e14;color:var(--danger);border:1px solid var(--danger)}
+  .sev.HIGH{background:#3a2410;color:var(--warn);border:1px solid var(--warn)}
+  .sev.MEDIUM{background:#13202a;color:var(--cyan);border:1px solid var(--cyan)}
+  .sev.LOW{background:#17222a;color:#8fb8c6;border:1px solid #355866}
+  .sev.INFO{background:#1a2430;color:var(--dim)}
+  .find{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-top:8px;background:var(--panel2);font-size:12px}
+  .checks{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .check{border:1px solid var(--line);border-radius:8px;padding:9px;background:var(--panel2)}
+  .check.pass{border-color:var(--accent)}.check.review{border-color:var(--warn)}.check.fail{border-color:var(--danger)}
+  .check .ct{font-weight:700}.check .cv{font-size:11px;color:var(--dim);margin-top:4px}
+  .verdict{display:inline-block;font-weight:700;padding:6px 12px;border-radius:8px;margin-top:4px}
+  .verdict.yes{background:#3a0e14;color:var(--danger);border:1px solid var(--danger)}
+  .verdict.no{background:#12201a;color:var(--accent);border:1px solid var(--accent)}
+  .cred{font-weight:700;color:var(--danger)}
+  .counter{font-variant-numeric:tabular-nums;color:var(--warn)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .card h3{margin:0 0 12px;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--dim)}
+
+  /* network discovery */
+  .discovery{margin-bottom:14px}
+  .hostpicker{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .hostpicker label{color:var(--dim);font-size:11px;white-space:nowrap}
+  .hostpicker select{width:100%;background:#060a0f;border:1px solid var(--line);color:var(--fg);
+    font-family:var(--mono);padding:10px;border-radius:7px;outline:none}
+  .hostpicker select:focus{border-color:var(--cyan)}
+  .hostdetail{border-left:3px solid var(--cyan);padding:7px 10px;margin:4px 0 12px;background:#0b1118}
+  .hostdetail.gateway{border-left-color:var(--accent)}
+  .hostdetail .hosthead{justify-content:flex-start}
+  .hostdetail .hosttag{margin-left:auto}
+  .contextdetails{border-top:1px solid var(--line);padding-top:9px;margin-top:8px}
+  .contextdetails summary{color:var(--dim);font-size:11px;cursor:pointer;user-select:none}
+  .context{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 20px;margin-top:8px}
+  .context .kvbox{display:grid;grid-template-columns:110px minmax(0,1fr);gap:8px;padding:6px 0;border-bottom:1px solid var(--line)}
+  .context .k{font-size:10px;color:var(--dim);text-transform:uppercase}
+  .context .v{color:var(--cyan);word-break:break-all}
+  .hosthead{display:flex;justify-content:space-between;gap:8px;align-items:center}
+  .hostip{font-weight:700;color:var(--fg)}
+  .hostname{font-weight:700;color:var(--cyan);margin-top:5px}
+  .hostrole{font-size:10px;color:var(--dim);margin-top:3px}
+  .hosttag{font-size:9px;padding:2px 6px;border-radius:9px;background:#163026;color:var(--accent)}
+  .hostmeta{font-size:10px;color:var(--dim);margin-top:5px;min-height:13px;word-break:break-all}
+  .miniports{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
+  .miniport{font-size:10px;color:var(--danger);border:1px solid #51242b;border-radius:5px;padding:3px 5px}
+  @media(max-width:760px){.context{grid-template-columns:1fr}.hostpicker{align-items:stretch;flex-direction:column}}
+
+  /* radar */
+  .radar{position:relative;width:240px;height:240px;margin:6px auto;border-radius:50%;
+    background:radial-gradient(circle,#0c1620 0,#070b10 70%);border:1px solid var(--line)}
+  .radar::before,.radar::after{content:"";position:absolute;inset:0;border-radius:50%;border:1px solid #16303a}
+  .radar::before{inset:40px}.radar::after{inset:80px}
+  .sweep{position:absolute;inset:0;border-radius:50%;
+    background:conic-gradient(from 0deg,transparent 0 300deg,rgba(58,209,127,.35) 340deg,rgba(58,209,127,.6) 360deg);
+    animation:spin 1.6s linear infinite}
+  .radar.idle .sweep{animation-play-state:paused;opacity:.15}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .blip{position:absolute;width:10px;height:10px;border-radius:50%;background:var(--danger);
+    transform:translate(-50%,-50%);box-shadow:0 0 10px var(--danger);opacity:0;animation:pop .4s forwards}
+  @keyframes pop{to{opacity:1}}
+  .scanlabel{text-align:center;color:var(--cyan);font-size:12px;margin-top:4px;min-height:16px}
+
+  /* ports */
+  .ports{display:flex;flex-wrap:wrap;gap:8px}
+  .port{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:74px;
+    opacity:0;transform:translateY(6px);transition:.3s}
+  .port.show{opacity:1;transform:none;border-color:var(--danger)}
+  .port .p{font-weight:700;color:var(--danger)} .port .s{font-size:11px;color:var(--dim)}
+
+  .badge{display:inline-flex;align-items:center;gap:8px;background:#102015;border:1px solid var(--accent);
+    color:var(--accent);padding:8px 12px;border-radius:8px;font-weight:700;opacity:0;transition:.4s}
+  .badge.show{opacity:1}
+  .kv{color:var(--dim);font-size:12px;margin-top:8px;word-break:break-word}
+
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+  .chip{background:var(--panel2);border:1px solid var(--line);padding:6px 10px;border-radius:20px;font-size:12px}
+  .chip.hot{border-color:var(--warn);color:var(--warn)}
+
+  /* creds tree */
+  .tree{display:flex;flex-direction:column;gap:10px}
+  .node{border:1px solid var(--line);border-left:3px solid var(--dim);border-radius:8px;padding:10px 12px;background:var(--panel2)}
+  .node .t{font-weight:700} .node .d{font-size:12px;color:var(--dim);margin-top:3px}
+  .node.pri{border-left-color:var(--accent)} .node.mid{border-left-color:var(--cyan)}
+  .node.last{border-left-color:var(--warn)}
+  .tagmini{font-size:10px;padding:2px 7px;border-radius:10px;background:#1a2430;color:var(--dim);margin-left:6px}
+
+  .notes{margin:10px 0 0;padding:0;list-style:none}
+  .notes li{font-size:12px;color:var(--dim);padding:4px 0 4px 16px;position:relative}
+  .notes li::before{content:"›";position:absolute;left:2px;color:var(--accent)}
+
+  /* terminal log */
+  .term{grid-column:1/-1;background:#060a0f;border:1px solid var(--line);border-radius:12px;padding:12px 14px;
+    height:150px;overflow:auto;font-size:12px;line-height:1.6}
+  .term .l{white-space:pre-wrap} .term .ok{color:var(--accent)} .term .c{color:var(--cyan)}
+  .term .w{color:var(--warn)} .term .mut{color:var(--dim)}
+  .hidden{display:none}
+
+  /* compact WAN test */
+  .wanform{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:9px;align-items:end}
+  .wanfield{display:flex;flex-direction:column;gap:5px}
+  .wanfield.wide{grid-column:span 2}
+  .wanfield label{font-size:10px;color:var(--dim);text-transform:uppercase}
+  .wanfield input,.wanfield select{width:100%;background:#060a0f;border:1px solid var(--line);
+    color:var(--fg);font-family:var(--mono);padding:9px 10px;border-radius:7px;outline:none}
+  .wanfield input:focus,.wanfield select:focus{border-color:var(--cyan)}
+  .wantoggle{height:36px;display:flex;align-items:center;gap:7px;color:var(--fg);font-size:12px;
+    border:1px solid var(--line);border-radius:7px;padding:0 10px;background:#080d13;cursor:pointer}
+  .wanactions{display:flex;gap:7px}
+  .wanactions .btn{flex:1;white-space:nowrap}
+  .wanresults{margin-top:14px}
+  .samplebanner{color:var(--warn);border:1px solid var(--warn);background:#241e0c;
+    border-radius:7px;padding:8px 10px;margin-bottom:10px;font-size:12px}
+  .wanmetrics{display:flex;gap:0;border:1px solid var(--line);border-radius:8px;margin-bottom:12px;overflow:hidden}
+  .wanmetric{flex:1;padding:9px 12px;background:#080d13;border-right:1px solid var(--line)}
+  .wanmetric:last-child{border-right:0}
+  .wanmetric .k{font-size:9px;color:var(--dim);text-transform:uppercase}
+  .wanmetric .v{font-weight:700;color:var(--cyan);margin-top:3px}
+  .statuspill{display:inline-block;border-radius:10px;padding:2px 8px;font-size:10px;text-transform:uppercase}
+  .statuspill.idle{background:#1a2430;color:var(--dim)}
+  .statuspill.running{background:#102832;color:var(--cyan)}
+  .statuspill.completed{background:#102015;color:var(--accent)}
+  .statuspill.cancelled,.statuspill.error,.statuspill.incomplete{background:#3a2410;color:var(--warn)}
+  .tablewrap{overflow-x:auto;margin-bottom:14px}
+  .wantable{width:100%;border-collapse:collapse;font-size:12px}
+  .wantable th{text-align:left;color:var(--dim);font-size:10px;text-transform:uppercase;
+    border-bottom:1px solid var(--line);padding:8px}
+  .wantable td{border-bottom:1px solid var(--line);padding:9px 8px;vertical-align:top}
+  .wantable .empty{color:var(--dim);text-align:center;padding:18px}
+  .wannotes{color:var(--dim);font-size:11px;margin-top:4px}
+  .debugblock{margin:8px 0 0;background:#060a0f;border:1px solid var(--line);border-radius:7px;
+    color:var(--dim);font:11px/1.55 var(--mono);padding:9px 10px;white-space:pre-wrap;word-break:break-word}
+  .wansubtabs,.lansubtabs{display:flex;gap:5px;margin-bottom:12px}
+  .wansubtab,.lansubtab{background:var(--panel);border:1px solid var(--line);color:var(--dim);font:700 11px var(--mono);
+    padding:8px 13px;border-radius:7px;cursor:pointer}
+  .wansubtab.active,.lansubtab.active{color:var(--cyan);border-color:var(--cyan);background:#102832}
+  .wanpanel,.lanpanel{display:none}.wanpanel.active,.lanpanel.active{display:block}
+  .pentesttooltabs{display:flex;gap:5px;margin-bottom:12px}
+  .pentesttooltab{background:var(--panel);border:1px solid var(--line);color:var(--dim);font:700 11px var(--mono);
+    padding:8px 13px;border-radius:7px;cursor:pointer}
+  .pentesttooltab.active{color:var(--cyan);border-color:var(--cyan);background:#102832}
+  .pentesttoolpanel{display:none}.pentesttoolpanel.active{display:block}
+  .niktooutput{min-height:180px;max-height:340px;overflow:auto;color:var(--fg)}
+  .niktoform{grid-template-columns:minmax(240px,2fr) repeat(2,minmax(120px,1fr))}
+  .niktoform .wanfield.wide{grid-column:auto}
+  .niktocategories{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin:8px 0}
+  .niktocategory{display:flex;align-items:flex-start;gap:7px;border:1px solid var(--line);border-radius:7px;background:#080d13;padding:8px;font-size:11px}
+  .niktocategory .code{color:var(--cyan);font-weight:700}.niktocategory .desc{color:var(--dim);font-size:10px;margin-top:3px;line-height:1.35}
+  .niktocategory.danger{border-color:#6b2730;background:#1f1014}.niktocategory.danger .code{color:var(--danger)}
+  .niktocategory.caution{border-color:#5b481b;background:#211b0d}.niktocategory.caution .code{color:var(--warn)}
+  .niktosummary{border:1px solid var(--line);border-radius:7px;background:#080d13;padding:9px 10px;margin-top:8px}
+  .niktocommand{margin:6px 0 0;color:var(--cyan);white-space:pre-wrap;word-break:break-word;font:11px/1.45 var(--mono)}
+  .niktowarning{font-size:11px;color:var(--dim);margin-top:7px}.niktowarning.amber{color:var(--warn)}.niktowarning.red{color:var(--danger);font-weight:700}
+  .niktoconfirm{border:1px solid var(--danger);border-radius:7px;background:#281016;color:var(--danger);padding:9px 10px;margin-top:8px;font-size:11px}
+  .niktoactions{justify-content:flex-end;margin-top:10px}
+  .niktoactions .btn{flex:0 1 160px}
+  .enginegrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0}
+  .engineitem{display:flex;align-items:flex-start;gap:8px;border:1px solid var(--line);border-radius:8px;
+    background:#080d13;padding:9px;cursor:pointer}
+  .engineitem .name{font-weight:700}.engineitem .meta{font-size:10px;color:var(--dim);margin-top:3px}
+  .checklist{display:flex;flex-direction:column;gap:6px;margin:8px 0 12px;max-height:300px;overflow:auto}
+  .checkrow{display:grid;grid-template-columns:auto 90px 1fr;gap:9px;align-items:start;border-bottom:1px solid var(--line);padding:7px 3px}
+  .checkrow .engine{color:var(--cyan);font-size:10px;text-transform:uppercase}
+  .checkrow .desc{color:var(--dim);font-size:10px;margin-top:3px}
+  .findingrow{cursor:pointer}.findingrow:hover{background:#111b25}.findingrow.selected{background:#102832}
+  .findingdetail{border:1px solid var(--line);border-radius:8px;background:#080d13;padding:12px;margin-top:10px}
+  .findingdetail h4{margin:0 0 8px;color:var(--cyan)}
+  .findingdetail .label{color:var(--dim);font-size:10px;text-transform:uppercase;margin-top:9px}
+  .findingdetail pre{white-space:pre-wrap;word-break:break-word;color:var(--fg);font:11px/1.5 var(--mono);margin:4px 0 0}
+  .credentialdefaults{border:1px solid var(--line);border-radius:8px;background:#080d13;padding:9px;margin:10px 0}
+  .credentialoptions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:8px}
+  .credentialoption{display:flex;align-items:center;gap:7px;color:var(--fg);font-size:11px;border:1px solid var(--line);border-radius:6px;padding:7px 8px}
+  @media(max-width:900px){.wanform{grid-template-columns:repeat(2,minmax(0,1fr))}.wanfield.wide{grid-column:span 2}.niktoform{grid-template-columns:repeat(2,minmax(0,1fr))}.niktoform .wanfield.wide{grid-column:span 2}}
+  @media(max-width:560px){.wanform,.niktoform{grid-template-columns:1fr}.wanfield.wide,.niktoform .wanfield.wide{grid-column:span 1}.wanmetrics{flex-direction:column}.wanmetric{border-right:0;border-bottom:1px solid var(--line)}.niktoactions{flex-direction:column}.niktoactions .btn{flex:auto;width:100%}}
+  @media(max-width:700px){.enginegrid,.credentialoptions,.niktocategories{grid-template-columns:1fr}.checkrow{grid-template-columns:auto 70px 1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">weak<b>&amp;</b></div>
+    <div class="tag">// CPE attack-surface harness — find the weak end before attackers do</div>
+    <div class="spacer"></div>
+    <span class="mode" id="mode">LAN AUDIT</span>
+  </header>
+
+  <nav class="tabs" aria-label="test areas">
+    <button class="tabbtn active" data-tab="lanview" type="button">LAN Audit</button>
+    <button class="tabbtn" data-tab="wanview" type="button">WAN Audit</button>
+  </nav>
+
+  <section class="tabview active" id="lanview">
+  <div class="lansubtabs" aria-label="LAN audit workflow">
+    <button class="lansubtab active" data-lanpanel="lanaudit" type="button">Audit</button>
+    <button class="lansubtab" data-lanpanel="lanfindings" type="button">Findings <span id="lanfindingcount">0</span></button>
+  </div>
+
+  <div class="lanpanel active" id="lanaudit">
+
+  <div class="controls">
+    <div class="bar">
+      <span class="controltitle discovery-title">NETWORK DISCOVERY</span>
+      <select id="dscan" title="network discovery TCP profile">
+        <option value="common">common ports</option>
+        <option value="top" selected>top 1000</option>
+      </select>
+      <div class="lanoptions">
+        <label class="chk" title="bounded UDP scan of common CPE protocols on the gateway; requires privileges"><input id="udpcommon" type="checkbox"> common UDP</label>
+        <label class="chk" title="also scan all 1-65535 TCP ports on the gateway"><input id="fullgw" type="checkbox"> full gateway</label>
+      </div>
+      <button class="btn secondary" id="discover">◎ DISCOVER LAN</button>
+    </div>
+    <div class="bar">
+      <span class="controltitle audit-title">TARGET AUDIT</span>
+      <input id="host" type="text" placeholder="target IP" spellcheck="false" aria-label="target IP">
+      <button class="btn" id="run" title="Scans services, then runs three bounded generic defaults against discovered SSH and Telnet services">▶ RUN LAN AUDIT</button>
+      <span class="kv" style="margin:0">includes bounded SSH/Telnet credential checks</span>
+    </div>
+  </div>
+
+  <div class="card discovery hidden" id="discoverybox">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <h3 style="margin:0">Network discovery</h3><span class="spacer"></span>
+      <button class="btn secondary" id="loadlast" type="button">↻ LOAD LAST</button>
+    </div>
+    <div class="hostpicker">
+      <label for="discoveryhost">DISCOVERED HOST</label>
+      <select id="discoveryhost" aria-label="discovered host">
+        <option value="">No hosts loaded</option>
+      </select>
+    </div>
+    <div class="hostdetail hidden" id="discoveryhostdetail"></div>
+    <details class="contextdetails">
+      <summary>Connection context</summary>
+      <div class="context" id="netcontext"></div>
+      <ul class="notes" id="discoverynotes"></ul>
+    </details>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Scan</h3>
+      <div class="radar idle" id="radar"><div class="sweep"></div></div>
+      <div class="scanlabel" id="scanlabel">standby</div>
+    </div>
+
+    <div class="card">
+      <h3>Open ports <span class="mut" id="portcount" style="color:var(--dim)"></span></h3>
+      <div class="ports" id="ports"><span class="kv">— run a scan to enumerate —</span></div>
+
+      <div id="checksbox" class="hidden" style="margin-top:16px">
+        <h3>Exposure controls</h3>
+        <div class="checks" id="checks"></div>
+      </div>
+
+      <div id="fpbox" class="hidden" style="margin-top:16px">
+        <h3>Fingerprint</h3>
+        <span class="badge" id="vendorbadge">● <span id="vendorname"></span></span>
+        <div class="kv" id="httptitle"></div>
+      </div>
+
+      <div id="sshbox" class="hidden" style="margin-top:16px">
+        <h3>SSH · auth surface</h3>
+        <div class="kv">banner <b id="sshbanner" style="color:var(--fg)"></b></div>
+        <div class="chips" id="authchips"></div>
+        <ul class="notes" id="sshnotes"></ul>
+      </div>
+
+      <div id="credbox" class="hidden" style="margin-top:16px">
+        <h3>Stage 3 · bounded SSH/Telnet credential checks</h3>
+        <div class="tree" id="credattempts"></div>
+        <div id="credresult" style="margin-top:10px"></div>
+        <ul class="notes" id="crednotes"></ul>
+      </div>
+    </div>
+
+    <div class="term" id="term"></div>
+  </div>
+  </div>
+
+  <div class="lanpanel" id="lanfindings">
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <h3 style="margin:0">LAN findings and test results</h3><span class="spacer"></span>
+        <button class="btn secondary" id="lanfindingsexport" type="button" disabled>EXPORT HTML</button>
+      </div>
+      <div class="tablewrap"><table class="wantable">
+        <thead><tr><th>Finding</th><th>Severity</th><th>Service</th><th>Engine</th><th>Reference</th><th>Status</th></tr></thead>
+        <tbody id="lanunifiedfindings"><tr><td class="empty" colspan="6">Run LAN Audit to populate findings.</td></tr></tbody>
+      </table></div>
+      <div class="findingdetail hidden" id="lanfindingdetail"></div>
+    </div>
+  </div>
+  </section>
+
+  <section class="tabview" id="wanview">
+    <div class="wansubtabs" aria-label="WAN audit workflow">
+      <button class="wansubtab active" data-wanpanel="wanrecon" type="button">Recon</button>
+      <button class="wansubtab" data-wanpanel="wanpentest" type="button">Pentest</button>
+      <button class="wansubtab" data-wanpanel="wanfindings" type="button">Findings</button>
+    </div>
+
+    <div class="wanpanel active" id="wanrecon">
+    <div class="card">
+      <h3>External WAN Scan</h3>
+      <div class="wanform">
+        <div class="wanfield wide">
+          <label for="wanhost">Target WAN IP address</label>
+          <input id="wanhost" type="text" placeholder="Enter an authorized target IP" spellcheck="false">
+        </div>
+        <div class="wanfield">
+          <label for="wanmanufacturer">Manufacturer (optional)</label>
+          <input id="wanmanufacturer" type="text" placeholder="Unknown" maxlength="80">
+        </div>
+        <div class="wanfield">
+          <label for="wanmodel">Model (optional)</label>
+          <input id="wanmodel" type="text" placeholder="Unknown" maxlength="80">
+        </div>
+        <div class="wanfield">
+          <label for="wanprofile">Scan profile</label>
+          <select id="wanprofile">
+            <option value="quick">Quick Scan</option>
+            <option value="full">Full TCP Scan</option>
+            <option value="udp">UDP Scan</option>
+            <option value="vulnerability">Vulnerability Assessment</option>
+          </select>
+        </div>
+        <div class="wanfield">
+          <label>Mode</label>
+          <label class="wantoggle" title="Turn on to execute Nmap against the target">
+            <input id="wanlive" type="checkbox"> <span id="wanmodetext">Demo Mode</span>
+          </label>
+        </div>
+        <div class="wanfield wide">
+          <label for="waninterface">Network interface</label>
+          <select id="waninterface">
+            <option value="">Automatic routing</option>
+          </select>
+        </div>
+        <div class="wanfield wide">
+          <label>Scan control</label>
+          <div class="wanactions">
+            <button class="btn" id="wanstart" type="button">▶ START SCAN</button>
+            <button class="btn warn" id="wancancel" type="button" disabled>■ STOP SCAN</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card wanresults">
+      <div class="samplebanner hidden" id="wansample">SAMPLE DATA · No network scan was executed.</div>
+      <div class="wanmetrics">
+        <div class="wanmetric"><div class="k">Scan status</div><div class="v"><span class="statuspill idle" id="wanstatus">idle</span></div></div>
+        <div class="wanmetric"><div class="k">Open ports</div><div class="v" id="wanportcount">0</div></div>
+        <div class="wanmetric"><div class="k">Detected services</div><div class="v" id="wanservicecount">0</div></div>
+        <div class="wanmetric"><div class="k">Potential findings</div><div class="v" id="wanfindingcount">0</div></div>
+        <div class="wanmetric"><div class="k">Interface used</div><div class="v" id="waninterfaceused">—</div></div>
+      </div>
+
+      <h3>Discovered services</h3>
+      <div class="tablewrap">
+        <table class="wantable">
+          <thead><tr><th>Port</th><th>Protocol</th><th>State</th><th>Service</th><th>Product</th><th>Version</th></tr></thead>
+          <tbody id="wanports"><tr><td class="empty" colspan="6">Run a scan to view services.</td></tr></tbody>
+        </table>
+      </div>
+
+      <h3>Potential security findings</h3>
+      <div class="tablewrap">
+        <table class="wantable">
+          <thead><tr><th>Finding</th><th>Severity</th><th>Description</th><th>Evidence</th></tr></thead>
+          <tbody id="wanfindings"><tr><td class="empty" colspan="4">No findings loaded.</td></tr></tbody>
+        </table>
+      </div>
+      <div class="wannotes" id="wannotes"></div>
+      <details class="contextdetails" open>
+        <summary>Scan debug</summary>
+        <pre class="debugblock" id="wandebug">No scan executed.</pre>
+      </details>
+    </div>
+
+    </div>
+
+    <div class="wanpanel" id="wanpentest">
+      <div class="pentesttooltabs" aria-label="WAN pentest tools">
+        <button class="pentesttooltab active" data-pentesttool="pentestchecksview" type="button">Security Checks</button>
+        <button class="pentesttooltab" data-pentesttool="pentestniktoview" type="button">Nikto</button>
+      </div>
+      <div class="pentesttoolpanel active" id="pentestchecksview">
+      <div class="card">
+        <h3>Pentest · evidence-based checks</h3>
+        <div class="wanmetrics">
+          <div class="wanmetric"><div class="k">Selected target</div><div class="v" id="pentesttarget">—</div></div>
+          <div class="wanmetric"><div class="k">Discovered services</div><div class="v" id="pentestservicecount">0</div></div>
+          <div class="wanmetric"><div class="k">Execution status</div><div class="v"><span class="statuspill idle" id="penteststatus">idle</span></div></div>
+          <div class="wanmetric"><div class="k">Normalized findings</div><div class="v" id="pentestfindingcount">0</div></div>
+        </div>
+        <h3>Testing engines</h3>
+        <div class="enginegrid">
+          <label class="engineitem"><input type="checkbox" id="engine-nmap" value="nmap" checked><span><span class="name">Nmap NSE</span><div class="meta" id="engine-nmap-meta">Waiting for live Recon</div></span></label>
+          <label class="engineitem"><input type="checkbox" id="engine-nuclei" value="nuclei" checked><span><span class="name">Nuclei</span><div class="meta" id="engine-nuclei-meta">Waiting for live Recon</div></span></label>
+        </div>
+        <h3>Applicable security checks</h3>
+        <div class="checklist" id="pentestchecks"><div class="kv">Run a Live Recon first.</div></div>
+        <div class="wanactions">
+          <button class="btn" id="penteststart" type="button" disabled>▶ START TESTS</button>
+          <button class="btn warn" id="penteststop" type="button" disabled>■ STOP TESTS</button>
+        </div>
+        <div class="wannotes" id="pentestnotes"></div>
+      </div>
+      <div class="card wanresults" id="credentialpanel">
+        <h3>Credential Testing</h3>
+        <div class="wanform">
+          <div class="wanfield wide">
+            <label for="credentialtarget">Target IP</label>
+            <input id="credentialtarget" type="text" placeholder="Inherited from Recon or enter authorized IP" spellcheck="false">
+          </div>
+          <div class="wanfield">
+            <label for="credentialprotocol">Protocol</label>
+            <select id="credentialprotocol">
+              <option value="ssh">SSH</option><option value="telnet">Telnet</option>
+            </select>
+          </div>
+          <div class="wanfield">
+            <label for="credentialport">Port</label>
+            <input id="credentialport" type="number" min="1" max="65535" value="22">
+          </div>
+          <div class="wanfield">
+            <label for="credentialmode">Test mode</label>
+            <select id="credentialmode">
+              <option value="single">Single credential</option>
+              <option value="defaults">Small default check</option>
+            </select>
+          </div>
+          <div class="wanfield credential-single-field">
+            <label for="credentialusername">Username</label>
+            <input id="credentialusername" type="text" maxlength="128" autocomplete="off">
+          </div>
+          <div class="wanfield credential-single-field">
+            <label for="credentialpassword">Password</label>
+            <input id="credentialpassword" type="password" maxlength="256" autocomplete="new-password">
+          </div>
+        </div>
+        <div class="credentialdefaults hidden" id="credentialdefaults">
+          <div class="kv">Review and select 1–3 generic defaults. Nothing is preselected.</div>
+          <div class="credentialoptions" id="credentialoptions"></div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0">
+          <label class="chk"><input id="credentialauthorized" type="checkbox"> I confirm this is an authorized target</label>
+          <span class="spacer"></span>
+          <div class="wanactions">
+            <button class="btn" id="credentialstart" type="button" disabled>▶ START TEST</button>
+            <button class="btn warn" id="credentialstop" type="button" disabled>■ STOP TEST</button>
+          </div>
+        </div>
+        <div class="wanmetrics">
+          <div class="wanmetric"><div class="k">Status</div><div class="v"><span class="statuspill idle" id="credentialstatus">idle</span></div></div>
+          <div class="wanmetric"><div class="k">Attempted</div><div class="v" id="credentialattempted">0</div></div>
+          <div class="wanmetric"><div class="k">Successful</div><div class="v" id="credentialsuccessful">0</div></div>
+          <div class="wanmetric"><div class="k">Failed</div><div class="v" id="credentialfailed">0</div></div>
+          <div class="wanmetric"><div class="k">Duration</div><div class="v" id="credentialduration">0s</div></div>
+          <div class="wanmetric"><div class="k">Final result</div><div class="v" id="credentialfinal">—</div></div>
+        </div>
+        <div class="tablewrap"><table class="wantable">
+          <thead><tr><th>Username</th><th>Reference</th><th>Status</th><th>Duration</th><th>Evidence</th></tr></thead>
+          <tbody id="credentialattempts"><tr><td class="empty" colspan="5">No credential test executed.</td></tr></tbody>
+        </table></div>
+        <div class="wannotes" id="credentialnotes">Run Live Recon, or enable Live Scan and enter an authorized target manually.</div>
+      </div>
+      <div class="card wanresults">
+        <h3>Engine executions</h3>
+        <div class="tablewrap"><table class="wantable">
+          <thead><tr><th>Engine</th><th>Status</th><th>Checks</th><th>Findings</th><th>Duration</th><th>Note</th></tr></thead>
+          <tbody id="pentestexecutions"><tr><td class="empty" colspan="6">No tests executed.</td></tr></tbody>
+        </table></div>
+      </div>
+      </div>
+
+      <div class="pentesttoolpanel" id="pentestniktoview">
+        <div class="card">
+          <h3>Nikto · HTTP/HTTPS security scan</h3>
+          <div class="wanform niktoform">
+            <div class="wanfield wide">
+              <label for="niktotarget">Target IP</label>
+              <input id="niktotarget" type="text" placeholder="Inherited from Recon or enter authorized IP" spellcheck="false">
+            </div>
+            <div class="wanfield">
+              <label for="niktoprotocol">Protocol</label>
+              <select id="niktoprotocol"><option value="http">HTTP</option><option value="https">HTTPS</option></select>
+            </div>
+            <div class="wanfield">
+              <label for="niktoport">Port</label>
+              <input id="niktoport" type="number" min="1" max="65535" value="80">
+            </div>
+          </div>
+          <h3 style="margin-top:14px">Test categories</h3>
+          <div class="niktocategories" id="niktocategories">
+            <label class="niktocategory"><input class="nikto-category" type="checkbox" value="0"><span><span class="code">0 · File Upload</span><div class="desc">Check for potentially unsafe file upload functionality.</div></span></label>
+            <label class="niktocategory"><input class="nikto-category" type="checkbox" value="1"><span><span class="code">1 · Interesting Files</span><div class="desc">Look for interesting or potentially sensitive files.</div></span></label>
+            <label class="niktocategory"><input class="nikto-category" type="checkbox" value="2" checked><span><span class="code">2 · Misconfiguration / Default Files</span><div class="desc">Check for default files and web server misconfigurations.</div></span></label>
+            <label class="niktocategory"><input class="nikto-category" type="checkbox" value="3" checked><span><span class="code">3 · Information Disclosure</span><div class="desc">Look for potentially exposed information.</div></span></label>
+            <label class="niktocategory"><input class="nikto-category" type="checkbox" value="4"><span><span class="code">4 · Injection</span><div class="desc">Test for XSS, script and HTML injection patterns.</div></span></label>
+            <label class="niktocategory"><input class="nikto-category" type="checkbox" value="5"><span><span class="code">5 · Remote File Retrieval (Web Root)</span><div class="desc">Check for unintended file access inside the web root.</div></span></label>
+            <label class="niktocategory danger"><input class="nikto-category" type="checkbox" value="6"><span><span class="code">6 · Denial of Service</span><div class="desc">Can interrupt services, destabilize the device, or temporarily remove connectivity.</div></span></label>
+            <label class="niktocategory"><input class="nikto-category" type="checkbox" value="7"><span><span class="code">7 · Remote File Retrieval (Server Wide)</span><div class="desc">Check for unintended file access outside the web root.</div></span></label>
+            <label class="niktocategory caution"><input class="nikto-category" type="checkbox" value="8"><span><span class="code">8 · Command Execution</span><div class="desc">May trigger unexpected device behavior while checking command execution paths.</div></span></label>
+            <label class="niktocategory"><input class="nikto-category" type="checkbox" value="9"><span><span class="code">9 · SQL Injection</span><div class="desc">Check for SQL injection vulnerabilities.</div></span></label>
+            <label class="niktocategory"><input class="nikto-category" type="checkbox" value="a"><span><span class="code">a · Authentication Bypass</span><div class="desc">Check for potential authentication bypass conditions.</div></span></label>
+            <label class="niktocategory"><input class="nikto-category" type="checkbox" value="b" checked><span><span class="code">b · Software Identification</span><div class="desc">Identify web server software and components.</div></span></label>
+            <label class="niktocategory"><input class="nikto-category" type="checkbox" value="c"><span><span class="code">c · Remote Source Inclusion</span><div class="desc">Check for unsafe inclusion of external resources.</div></span></label>
+          </div>
+          <div class="niktosummary">
+            <div class="kv" id="niktoselected">Selected: 2, 3, b</div>
+            <pre class="niktocommand" id="niktocommand">nikto -h http://TARGET_IP:80 -Tuning 23b -timeout 3</pre>
+            <div class="niktowarning" id="niktodurationwarning"></div>
+            <div class="niktowarning red hidden" id="niktodoswarning">Category 6 can interrupt connectivity, destabilize the device, or make it temporarily unavailable. Excluding it does not guarantee a non-disruptive scan.</div>
+            <div class="niktowarning amber hidden" id="niktocommandwarning">Category 8 may trigger unexpected device behavior.</div>
+          </div>
+          <div class="niktoconfirm hidden" id="niktodosconfirm">
+            <label><input id="niktodosauthorized" type="checkbox"> I explicitly confirm category 6 may interrupt connectivity or device availability.</label>
+          </div>
+          <div class="wanactions niktoactions">
+            <button class="btn" id="niktostart" type="button" disabled>▶ START SCAN</button>
+            <button class="btn warn" id="niktostop" type="button" disabled>■ STOP SCAN</button>
+          </div>
+          <div class="wanmetrics" style="margin-top:12px">
+            <div class="wanmetric"><div class="k">Scan status</div><div class="v"><span class="statuspill idle" id="niktostatus">idle</span></div></div>
+            <div class="wanmetric"><div class="k">Result</div><div class="v" id="niktoresult">—</div></div>
+            <div class="wanmetric"><div class="k">Security findings</div><div class="v" id="niktofindingcount">0</div></div>
+            <div class="wanmetric"><div class="k">Duration</div><div class="v" id="niktoduration">0s</div></div>
+          </div>
+          <h3>Scan output</h3>
+          <pre class="debugblock niktooutput" id="niktooutput">No Nikto scan executed.</pre>
+          <div class="wannotes" id="niktonotes">Nikto runs only after you click Start Scan against an explicitly authorized target.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="wanpanel" id="wanfindings">
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <h3 style="margin:0">Unified findings</h3><span class="spacer"></span>
+          <button class="btn secondary" id="findingsexport" type="button" disabled>EXPORT HTML</button>
+        </div>
+        <div class="tablewrap"><table class="wantable">
+          <thead><tr><th>Finding</th><th>Severity</th><th>Service</th><th>Engine</th><th>Reference</th><th>Status</th></tr></thead>
+          <tbody id="unifiedfindings"><tr><td class="empty" colspan="6">Run Live Recon and selected Pentest checks to populate findings.</td></tr></tbody>
+        </table></div>
+        <div class="findingdetail hidden" id="findingdetail"></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+const api = async (p,q)=>{const u=new URL(location.origin+p);Object.entries(q).forEach(([k,v])=>v!=null&&u.searchParams.set(k,v));const r=await fetch(u);return r.json();};
+const postJson = async (path,payload)=>{const response=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});return response.json();};
+let currentVantage="lan";
+let discoveredHosts=[];
+let discoveredAudits={};
+let lanFindings=[];
+
+function log(msg,cls="l"){const t=$("#term");const d=document.createElement("div");d.className="l";d.innerHTML=`<span class="mut">$</span> <span class="${cls}">${msg}</span>`;t.appendChild(d);t.scrollTop=t.scrollHeight;}
+function stepState(k,s){const el=document.querySelector(`.step[data-k="${k}"]`);if(!el)return;
+  el.classList.remove("run","done");if(s)el.classList.add(s);el.querySelector(".st").textContent=s==="run"?"running…":s==="done"?"done":"idle";}
+function resetUI(){["surface","fp","ssh","attack","privesc"].forEach(k=>stepState(k,""));
+  $("#ports").innerHTML="";$("#portcount").textContent="";
+  ["fpbox","sshbox","credbox","checksbox"].forEach(id=>$("#"+id).classList.add("hidden"));
+  $("#checks").innerHTML="";
+  $("#authchips").innerHTML="";$("#sshnotes").innerHTML="";$("#crednotes").innerHTML="";
+  $("#credattempts").innerHTML="";$("#credresult").innerHTML="";
+  $("#vendorbadge").classList.remove("show");$("#term").innerHTML="";}
+
+function setControlsDisabled(disabled){$("#run").disabled=disabled;$("#discover").disabled=disabled;
+  $("#loadlast").disabled=disabled;
+  $("#dscan").disabled=disabled;$("#fullgw").disabled=disabled;$("#udpcommon").disabled=disabled;}
+
+function resetDiscovery(){stepState("discover","");
+  discoveredHosts=[];discoveredAudits={};$("#netcontext").innerHTML="";
+  $("#discoveryhost").innerHTML='<option value="">No hosts loaded</option>';
+  $("#discoveryhostdetail").innerHTML="";$("#discoveryhostdetail").classList.add("hidden");
+  $("#discoverynotes").innerHTML="";$("#discoverybox").classList.add("hidden");}
+
+function addContext(key,value){const box=document.createElement("div");box.className="kvbox";
+  const k=document.createElement("div");k.className="k";k.textContent=key;
+  const v=document.createElement("div");v.className="v";v.textContent=value??"—";
+  box.append(k,v);$("#netcontext").appendChild(box);}
+
+function addCheck(title,value,tone="review"){const card=document.createElement("div");card.className="check "+tone;
+  const t=document.createElement("div");t.className="ct";t.textContent=title;
+  const v=document.createElement("div");v.className="cv";v.textContent=value;card.append(t,v);$("#checks").appendChild(card);}
+
+function selectDiscoveredHost(address,writeLog=false){
+  const h=discoveredHosts.find(host=>host.address===address);const detail=$("#discoveryhostdetail");
+  if(!h){detail.innerHTML="";detail.classList.add("hidden");return;}
+  $("#host").value=h.address;detail.innerHTML="";detail.className="hostdetail"+(h.is_gateway?" gateway":"");
+  const head=document.createElement("div");head.className="hosthead";
+  const ip=document.createElement("span");ip.className="hostip";ip.textContent=h.address;
+  const name=document.createElement("span");name.className="hostname";name.style.marginTop="0";
+  name.textContent=h.display_name||"Unidentified host";head.append(ip,name);
+  if(h.is_gateway||h.role==="CPE WAN interface candidate"){
+    const tag=document.createElement("span");tag.className="hosttag";
+    tag.textContent=h.is_gateway?"GATEWAY":"WAN CANDIDATE";head.appendChild(tag);}
+  detail.appendChild(head);
+  const role=document.createElement("div");role.className="hostrole";
+  role.textContent=[h.role,h.identity_confidence?"confidence: "+h.identity_confidence:null].filter(Boolean).join(" · ");
+  detail.appendChild(role);
+  const meta=document.createElement("div");meta.className="hostmeta";
+  meta.textContent=[h.mac,h.vendor].filter(Boolean).join(" · ")||"identity unavailable";detail.appendChild(meta);
+  const audit=discoveredAudits[h.address];
+  if(audit){const state=document.createElement("div");state.className="hostrole";
+    state.style.color=audit.found?"var(--danger)":"var(--accent)";
+    state.textContent=audit.found?`SSH DEFAULT CONFIRMED · ${audit.credential_label}`:
+      `SSH defaults (${audit.profile}) · no confirmed hit`;detail.appendChild(state);}
+  const ports=document.createElement("div");ports.className="miniports";
+  for(const p of (h.ports||[])){const chip=document.createElement("span");chip.className="miniport";
+    chip.textContent=`${p.port}/${p.protocol||"tcp"}${p.service?" "+p.service:""}`;ports.appendChild(chip);}
+  if(!(h.ports||[]).length){const empty=document.createElement("span");empty.className="hostmeta";
+    empty.textContent="no open ports in profile";ports.appendChild(empty);}
+  detail.appendChild(ports);
+  if(writeLog)log(`selected target <span class="c">${h.address}</span> from discovery`,"c");
+}
+
+function renderDiscovery(data,audits={}){const ctx=data.context||{};currentVantage=ctx.vantage||"lan";
+  discoveredHosts=(data.hosts||[]).filter(host=>!host.is_self);discoveredAudits=audits;
+  $("#discoverybox").classList.remove("hidden");
+  addContext("vantage",ctx.vantage);addContext("interface",ctx.interface);
+  addContext("this laptop",ctx.address+(ctx.prefixlen!=null?"/"+ctx.prefixlen:""));
+  addContext("network",ctx.network);addContext("gateway",ctx.gateway);
+  addContext("connected SSID",ctx.ssid);addContext("connected BSSID",ctx.bssid);
+  const selector=$("#discoveryhost");selector.innerHTML="";
+  if(!discoveredHosts.length){const option=document.createElement("option");option.value="";
+    option.textContent="No targetable hosts found";selector.appendChild(option);}
+  for(const h of discoveredHosts){const option=document.createElement("option");option.value=h.address;
+    const portCount=(h.ports||[]).length;option.textContent=`${h.address} — ${h.display_name||"Unidentified host"} — ${portCount} open`;
+    selector.appendChild(option);}
+  const preferred=discoveredHosts.find(h=>h.is_gateway)||discoveredHosts.find(h=>(h.ports||[]).length)||discoveredHosts[0];
+  if(preferred){selector.value=preferred.address;selectDiscoveredHost(preferred.address);}
+  selector.onchange=()=>selectDiscoveredHost(selector.value,true);
+  for(const note of (data.notes||[])){const li=document.createElement("li");li.textContent=note;
+    $("#discoverynotes").appendChild(li);}
+}
+
+async function loadLatestLan(){setControlsDisabled(true);
+  try{const data=await api("/api/latest-lan",{});if(!data.discovery)throw new Error("no LAN artifact yet");
+    resetDiscovery();renderDiscovery(data.discovery,data.default_audits||{});
+    $("#mode").textContent="LAN AUDIT";
+    $("#scanlabel").textContent=(data.discovery.hosts||[]).length+" hosts · loaded";
+    log("loaded latest LAN discovery and SSH-default audit artifacts","ok");
+  }catch(error){log("load latest error: "+error.message,"w");}
+  finally{setControlsDisabled(false);}}
+
+async function discoverNetwork(){const scan=$("#dscan").value;const full_gateway=$("#fullgw").checked?1:0;
+  const udp=$("#udpcommon").checked?"common":"none";
+  setControlsDisabled(true);resetDiscovery();
+  $("#mode").textContent="LAN AUDIT";
+  stepState("discover","run");const radar=$("#radar");radar.classList.remove("idle");
+  $("#scanlabel").textContent="discovering current LAN …";
+  log(`stage 0 · discover current LAN · ${scan}${full_gateway?" + full gateway":""}${udp==="common"?" + common UDP":""}`,"c");
+  const blips=setInterval(blip,180);
+  try{
+    const data=await api("/api/discover",{vantage:"lan",scan,full_gateway,udp});
+    clearInterval(blips);
+    if(data.error){throw new Error(data.error+(data.detail?" — "+data.detail:""));}
+    renderDiscovery(data);stepState("discover","done");
+    const count=(data.hosts||[]).length;$("#scanlabel").textContent=count+" live hosts";
+    log(`discovery complete → <span class="ok">${count} host(s)</span> · artifact saved`,"ok");
+  }catch(error){clearInterval(blips);stepState("discover","");
+    $("#scanlabel").textContent="discovery failed";log("discovery error: "+error.message,"w");
+  }finally{radar.classList.add("idle");setControlsDisabled(false);}
+}
+
+function blip(){const r=$("#radar");const a=Math.random()*2*Math.PI, rad=30+Math.random()*80;
+  const b=document.createElement("div");b.className="blip";
+  b.style.left=(50+Math.cos(a)*rad/1.2)+"%";b.style.top=(50+Math.sin(a)*rad/1.2)+"%";r.appendChild(b);setTimeout(()=>b.remove(),2500);}
+
+function lanReconFromSurface(host,surface){const services=surface.services||{};
+  return {target:host,manufacturer:surface.vendor||null,model:null,sample_data:false,
+    ports:(surface.open_ports||[]).map(port=>{const raw=String(services[port]||services[String(port)]||"unknown");
+      const uncertain=raw.endsWith("?");return {port:Number(port),protocol:"tcp",state:"open",
+        service:raw.replace(/\?+$/,"")||"unknown",product:null,version:null,extra_info:null,
+        service_method:uncertain?"table":"probed",service_confidence:uncertain?3:8};})};}
+
+function addLanFinding(finding){if(!finding)return;
+  lanFindings=lanFindings.filter(item=>item.finding_id!==finding.finding_id);lanFindings.push(finding);}
+
+async function run(){
+  const host=$("#host").value.trim();
+  if(!host){log("enter or select an authorized LAN target","w");return;}
+  setControlsDisabled(true);resetUI();lanFindings=[];renderLanFindings();
+  const radar=$("#radar");radar.classList.remove("idle");$("#scanlabel").textContent="scanning "+host+" …";
+  log(`weaknd LAN audit <span class="c">${host}</span>`,"c");
+  let blips=setInterval(blip,180);
+  try{
+    stepState("surface","run");log("stage 1 · attack surface mapping → nmap -sV");
+    const surf=await api("/api/surface",{host});clearInterval(blips);blips=null;
+    if(surf.error)throw new Error(surf.error+(surf.detail?" — "+surf.detail:""));
+    const ports=surf.open_ports||[],svc=surf.services||{},recon=lanReconFromSurface(host,surf);
+    $("#checksbox").classList.remove("hidden");$("#ports").innerHTML="";$("#portcount").textContent=`(${ports.length})`;
+    for(const port of ports){const service=svc[port]||svc[String(port)]||"";const item=document.createElement("div");item.className="port";
+      const number=document.createElement("div");number.className="p";number.textContent=String(port);const name=document.createElement("div");name.className="s";name.textContent=service;
+      item.append(number,name);$("#ports").appendChild(item);await sleep(120);item.classList.add("show");
+      log(`  <span class="danger" style="color:var(--danger)">●</span> ${port}/tcp open  <span class="mut">${service}</span>`);}
+    stepState("surface","done");radar.classList.add("idle");$("#scanlabel").textContent=ports.length+" open ports";
+
+    stepState("fp","run");$("#fpbox").classList.remove("hidden");
+    $("#vendorname").textContent=surf.vendor||"unknown";$("#vendorbadge").classList.add("show");
+    log(surf.vendor?`stage 1b · fingerprint → vendor <span class="ok">${surf.vendor}</span>`:"stage 1b · vendor unknown",surf.vendor?"ok":"mut");
+    if(surf.http_title)$("#httptitle").textContent="http: "+surf.http_title;stepState("fp","done");
+
+    const prepared=await postJson("/api/pentest-checks",{target:host,recon,manufacturer:surf.vendor||"",model:""});
+    if(!prepared.error){lanFindings=[...(prepared.baseline_findings||[])];renderLanFindings();}
+
+    let ssh={reachable:false,auth_methods:[]};
+    if(ports.includes(22)){stepState("ssh","run");log("stage 2 · SSH auth-method probe (no password sent)","c");
+      ssh=await api("/api/ssh",{host});$("#sshbox").classList.remove("hidden");$("#sshbanner").textContent=ssh.banner||"—";
+      (ssh.auth_methods||[]).forEach(method=>{const chip=document.createElement("span");chip.className="chip"+(method==="password"?" hot":"");chip.textContent=method;$("#authchips").appendChild(chip);});
+      (ssh.notes||[]).forEach(note=>{const item=document.createElement("li");item.textContent=note;$("#sshnotes").appendChild(item);});
+      log(`  banner <span class="mut">${ssh.banner||"—"}</span> · auth [${(ssh.auth_methods||[]).join(", ")}]`);
+      addCheck("SSH · 22",ssh.reachable?"reachable · "+(ssh.banner||"banner unknown"):"not reachable",ssh.reachable?"review":"pass");stepState("ssh","done");
+    }else addCheck("SSH · 22","not open","pass");
+
+    if(ports.includes(23)){const telnet=await api("/api/telnet",{host});
+      addCheck("Telnet · 23",telnet.reachable?"reachable · plaintext management":"not reachable",telnet.reachable?"fail":"pass");
+      log(`telnet probe → ${telnet.reachable?"reachable":"not reachable"}`,telnet.reachable?"w":"ok");}
+    else addCheck("Telnet · 23","not open","pass");
+
+    if(ports.includes(7547)){const cwmp=await api("/api/cwmp",{host});
+      const statuses=(cwmp.observations||[]).map(item=>`${item.method}:${item.status??"error"}`).join(" · ");
+      addCheck("CWMP · 7547",`${cwmp.verdict} · ${cwmp.server||"unknown server"} · ${statuses}`,"review");
+      log(`cwmp probe → ${cwmp.verdict} · ${statuses}`,"w");}
+    else addCheck("CWMP · 7547","not exposed","pass");
+
+    stepState("attack","run");$("#credbox").classList.remove("hidden");
+      log("stage 3 · bounded generic credential checks · one worker · stop on success/rate-limit","c");
+      const options=await postJson("/api/credential-options",{recon});
+      if(!options.available){log("credential adapter unavailable; SSH/Telnet attempts skipped","w");}
+      else{const selected=(options.default_credentials||[]).map(item=>item.id);
+        const services=(options.discovered_services||[]).filter(item=>["ssh","telnet"].includes(item.protocol));
+        for(const service of services){
+          if(service.protocol==="ssh"&&(ssh.auth_methods||[]).length&&!(ssh.auth_methods||[]).includes("password")){
+            log("SSH password authentication is unsupported; credential attempts skipped","mut");continue;}
+          try{const result=await postJson("/api/credential-run",{target:host,recon,protocol:service.protocol,port:service.port,
+              mode:"defaults",selected_default_ids:selected,authorized:true,job_id:`lan-${service.protocol}-${Date.now()}`});
+            if(result.error)throw new Error(result.detail||result.error);
+            for(const attempt of (result.attempts||[])){const node=document.createElement("div");node.className="node "+(attempt.status==="authentication_successful"?"pri":"mid");
+              const title=document.createElement("div");title.className="t";title.textContent=`${service.protocol.toUpperCase()} · ${attempt.username} · ${attempt.credential_reference}`;
+              const detail=document.createElement("div");detail.className="d";detail.textContent=`${String(attempt.status||"inconclusive").replaceAll("_"," ")} · ${attempt.evidence||""}`;
+              node.append(title,detail);$("#credattempts").appendChild(node);}
+            const verdict=document.createElement("span");verdict.className="verdict "+(result.successful_authentications?"yes":"no");
+            verdict.textContent=`${service.protocol.toUpperCase()} · ${result.final_result}`;$("#credresult").appendChild(verdict);
+            log(`${service.protocol.toUpperCase()} credential check → ${result.final_result}`,result.successful_authentications?"w":"ok");
+            addLanFinding(result.finding);renderLanFindings();
+          }catch(error){log(`${service.protocol.toUpperCase()} credential check error: ${error.message}`,"w");}
+        }}
+      const note=document.createElement("li");note.textContent="Three reviewed generic defaults; passwords are omitted; no post-authentication command is executed.";$("#crednotes").appendChild(note);
+    stepState("attack","done");
+    log("LAN audit complete · review the LAN Findings tab","ok");
+  }catch(error){if(blips)clearInterval(blips);radar.classList.add("idle");$("#scanlabel").textContent="audit failed";log("LAN audit error: "+error.message,"w");}
+  finally{if(blips)clearInterval(blips);radar.classList.add("idle");setControlsDisabled(false);}
+}
+
+let wanJobId=null;
+let lastWanRecon=null;
+let pentestAvailability=null;
+let pentestJobId=null;
+let unifiedFindings=[];
+let pentestHasRun=false;
+let credentialJobId=null;
+let credentialConfig=null;
+let credentialFindings=[];
+let credentialReconTarget="";
+let credentialPreparedRecon=null;
+let niktoJobId=null;
+let niktoConfig=null;
+let niktoFindings=[];
+let niktoReconTarget="";
+let niktoClock=null;
+let niktoStartedAt=0;
+
+function setWanStatus(status){const el=$("#wanstatus");el.textContent=status;
+  el.className="statuspill "+(["idle","running","completed","incomplete","cancelled","error"].includes(status)?status:"idle");}
+
+function resetWanResults(){setWanStatus("idle");$("#wanportcount").textContent="0";
+  $("#wanservicecount").textContent="0";$("#wanfindingcount").textContent="0";
+  $("#waninterfaceused").textContent="—";
+  $("#wansample").classList.add("hidden");$("#wannotes").textContent="";
+  $("#wandebug").textContent="Scan in progress…";
+  $("#wanports").innerHTML='<tr><td class="empty" colspan="6">Scan in progress…</td></tr>';
+  $("#wanfindings").innerHTML='<tr><td class="empty" colspan="4">Waiting for observations…</td></tr>';}
+
+function appendCell(row,value,className=""){const cell=document.createElement("td");
+  cell.textContent=value??"—";if(className)cell.className=className;row.appendChild(cell);}
+
+function renderWanResult(result){
+  const status=result.status||(result.error?"error":"completed");setWanStatus(status);
+  const ports=result.ports||[],findings=result.findings||[];
+  $("#wanportcount").textContent=String(result.discovered_port_count??ports.length);
+  $("#wanservicecount").textContent=String(new Set(ports.map(port=>port.service).filter(Boolean)).size);
+  $("#wanfindingcount").textContent=String(findings.length);
+  $("#waninterfaceused").textContent=result.interface_used||"—";
+  $("#wansample").classList.toggle("hidden",!result.sample_data);
+  if(result.sample_data)$("#wansample").textContent=`SIMULATED DATA · ${result.target||"documentation example"} · No network scan was executed.`;
+
+  const portBody=$("#wanports");portBody.innerHTML="";
+  if(!ports.length){portBody.innerHTML='<tr><td class="empty" colspan="6">No open ports observed.</td></tr>';}
+  for(const port of ports){const row=document.createElement("tr");appendCell(row,String(port.port));
+    const serviceMethod=port.service_method==="table"?"port-table guess":port.service_method;
+    const serviceLabel=(port.service||"unknown")+(serviceMethod?` (${serviceMethod}${port.service_confidence!=null?`, confidence ${port.service_confidence}`:""})`:"");
+    appendCell(row,port.protocol);appendCell(row,port.state);appendCell(row,serviceLabel);appendCell(row,port.product);appendCell(row,port.version);
+    portBody.appendChild(row);}
+
+  const findingBody=$("#wanfindings");findingBody.innerHTML="";
+  if(!findings.length){findingBody.innerHTML='<tr><td class="empty" colspan="4">No potential findings derived from the observed services.</td></tr>';}
+  for(const finding of findings){const row=document.createElement("tr");appendCell(row,finding.title);
+    const severity=document.createElement("td");const badge=document.createElement("span");
+    badge.className="sev "+finding.severity;badge.textContent=finding.severity;severity.appendChild(badge);row.appendChild(severity);
+    appendCell(row,finding.description);appendCell(row,finding.evidence);findingBody.appendChild(row);}
+  const identity=[result.manufacturer,result.model,result.firmware].filter(Boolean).join(" · ");
+  const notes=[...(result.notes||[])];if(identity)notes.unshift("Device metadata: "+identity);
+  if(result.identity_evidence?.length)notes.unshift("Identity evidence: "+result.identity_evidence.join(", "));
+  if(result.manufacturer&&!$("#wanmanufacturer").value.trim())$("#wanmanufacturer").value=result.manufacturer;
+  if(result.model&&!$("#wanmodel").value.trim())$("#wanmodel").value=result.model;
+  if(result.error)notes.push(result.detail||result.error);
+  $("#wannotes").textContent=notes.join(" · ");
+  $("#wandebug").textContent=[
+    `Executed command: ${result.executed_command||"—"}`,
+    `Selected interface: ${result.requested_interface||"automatic"}`,
+    `Actual route interface: ${result.interface_used||"—"}`,
+    `Scan method: ${result.scan_method||"—"} · ${result.privilege_mode||"privilege state unavailable"}`,
+    `Process exit code: ${result.exit_code??"—"}`,
+    `Scan duration: ${result.duration_seconds??0}s`,
+    `Discovered ports: ${result.discovered_port_count??ports.length}`,
+    `Standard error: ${result.stderr||"—"}`,
+  ].join("\n");
+  lastWanRecon=result;pentestAvailability=null;pentestHasRun=false;unifiedFindings=[];credentialFindings=[];niktoFindings=[];
+  credentialConfig=null;credentialPreparedRecon=null;credentialReconTarget=result.target||"";$("#credentialtarget").value=result.target||"";$("#credentialauthorized").checked=false;
+  niktoConfig=null;niktoReconTarget=result.target||"";$("#niktotarget").value=result.target||"";
+  setNiktoStatus("idle");$("#niktoresult").textContent="—";$("#niktofindingcount").textContent="0";$("#niktoduration").textContent="0s";
+  $("#niktooutput").textContent="No Nikto scan executed.";$("#niktonotes").textContent="Nikto runs only after you click Start Scan against an explicitly authorized target.";
+  setCredentialStatus("idle");$("#credentialattempted").textContent="0";$("#credentialsuccessful").textContent="0";$("#credentialfailed").textContent="0";
+  $("#credentialduration").textContent="0s";$("#credentialfinal").textContent="—";$("#credentialattempts").innerHTML='<tr><td class="empty" colspan="5">No credential test executed.</td></tr>';
+  renderUnifiedFindings();
+  preparePentest();
+}
+
+function validIpAddress(value){
+  if(!value)return false;
+  if(value.includes(":")){try{const parsed=new URL(`http://[${value}]/`);return parsed.hostname.length>2;}catch{return false;}}
+  const parts=value.split(".");return parts.length===4&&parts.every(part=>/^\d{1,3}$/.test(part)&&Number(part)<=255);
+}
+
+async function startWanScan(){
+  const live=$("#wanlive").checked,host=$("#wanhost").value.trim();
+  if(live&&!host){resetWanResults();setWanStatus("error");$("#wannotes").textContent="Enter a target WAN IP address for a live scan.";return;}
+  if(host&&!validIpAddress(host)){resetWanResults();setWanStatus("error");$("#wannotes").textContent="Enter a valid IPv4 or IPv6 address.";return;}
+  resetWanResults();setWanStatus("running");$("#wanstart").disabled=true;$("#wancancel").disabled=!live;
+  wanJobId=`wan-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  try{const result=await api("/api/wan-scan",{
+      host,profile:$("#wanprofile").value,demo:live?0:1,
+      manufacturer:$("#wanmanufacturer").value.trim(),model:$("#wanmodel").value.trim(),
+      interface:$("#waninterface").value,job_id:wanJobId,
+    });renderWanResult(result);
+  }catch(error){renderWanResult({status:"error",error:error.message,ports:[],findings:[]});}
+  finally{wanJobId=null;$("#wanstart").disabled=false;$("#wancancel").disabled=true;}
+}
+
+async function cancelWanScan(){if(!wanJobId)return;$("#wancancel").disabled=true;
+  $("#wannotes").textContent="Stopping the active Nmap process…";
+  try{const result=await api("/api/wan-cancel",{job_id:wanJobId});
+    if(!result.cancelled)$("#wannotes").textContent="The scan had already finished.";
+  }catch(error){$("#wannotes").textContent="Cancel request failed: "+error.message;}}
+
+async function loadWanInterfaces(){
+  try{const result=await api("/api/interfaces",{}),selector=$("#waninterface");
+    selector.innerHTML='<option value="">Automatic routing</option>';
+    for(const item of (result.interfaces||[])){const option=document.createElement("option");option.value=item.name;
+      option.textContent=item.name+(item.addresses?.length?` · ${item.addresses.join(", ")}`:"")+(item.up?"":" · down");selector.appendChild(option);}
+  }catch(error){$("#wannotes").textContent="Interface discovery failed: "+error.message;}}
+
+function setPentestStatus(status){const el=$("#penteststatus");el.textContent=status;
+  el.className="statuspill "+(["idle","running","completed","cancelled","error"].includes(status)?status:"idle");}
+
+function syncPentestChecks(){document.querySelectorAll(".pentestcheck").forEach(input=>{
+  const engine=$("#engine-"+input.dataset.engine);input.disabled=!engine||!engine.checked;});
+  $("#penteststart").disabled=!lastWanRecon||lastWanRecon.sample_data||
+    ![...document.querySelectorAll(".pentestcheck")].some(input=>input.checked&&!input.disabled);}
+
+async function preparePentest(){
+  await prepareCredentialTesting();
+  const checks=$("#pentestchecks");$("#pentesttarget").textContent=lastWanRecon?.target||"—";
+  $("#pentestservicecount").textContent=String((lastWanRecon?.ports||[]).filter(port=>port.state==="open").length);
+  if(!lastWanRecon||lastWanRecon.status!=="completed"){
+    checks.innerHTML='<div class="kv">Complete a Recon scan first.</div>';$("#penteststart").disabled=true;return;}
+  if(lastWanRecon.sample_data){checks.innerHTML='<div class="kv">Pentest engines require Live Recon. Simulated results are never passed to scanners.</div>';
+    $("#penteststart").disabled=true;$("#pentestnotes").textContent="Switch to Live Scan and run Recon against an explicitly authorized target.";return;}
+  checks.innerHTML='<div class="kv">Identifying checks from confirmed services and safe protocol-validation candidates…</div>';
+  try{const result=await postJson("/api/pentest-checks",{
+      target:lastWanRecon.target,recon:lastWanRecon,manufacturer:$("#wanmanufacturer").value.trim(),model:$("#wanmodel").value.trim(),
+    });
+    if(result.error)throw new Error(result.detail||result.error);pentestAvailability=result;
+    for(const engine of ["nmap","nuclei"]){const state=result.engines?.[engine]||{};
+      const input=$("#engine-"+engine),meta=$("#engine-"+engine+"-meta");input.disabled=!state.available||!state.checks;
+      if(input.disabled)input.checked=false;meta.textContent=`${state.available?"available":"unavailable"} · ${state.checks||0} applicable check(s)${state.note?" · "+state.note:""}`;}
+    const visibleChecks=(result.checks||[]).filter(check=>["nmap","nuclei"].includes(check.engine));checks.innerHTML="";
+    if(!visibleChecks.length)checks.innerHTML='<div class="kv">No service-specific checks are applicable to the confirmed Recon evidence.</div>';
+    for(const check of visibleChecks){const label=document.createElement("label");label.className="checkrow";
+      const input=document.createElement("input");input.type="checkbox";input.className="pentestcheck";input.dataset.engine=check.engine;input.value=check.check_id;
+      input.checked=true;const engine=document.createElement("span");engine.className="engine";engine.textContent=check.engine;
+      const body=document.createElement("span");const name=document.createElement("div");name.textContent=check.name;
+      const description=document.createElement("div");description.className="desc";description.textContent=[check.service,check.port?`${check.port}/${check.protocol}`:null,check.description].filter(Boolean).join(" · ");
+      body.append(name,description);label.append(input,engine,body);checks.appendChild(label);input.addEventListener("change",syncPentestChecks);}
+    if(!pentestHasRun){unifiedFindings=[...(result.baseline_findings||[]),...credentialFindings,...niktoFindings];renderUnifiedFindings();}syncPentestChecks();
+    const candidateCount=visibleChecks.filter(check=>check.parameters?.service_evidence==="candidate").length;
+    const notes=[];if(candidateCount)notes.push(`${candidateCount} check(s) will validate low-confidence Nmap service candidates before reporting findings.`);
+    $("#pentestnotes").textContent=notes.join(" ")||"Checks are based on Recon service evidence, not port numbers alone.";
+  }catch(error){checks.innerHTML="";const message=document.createElement("div");message.className="kv";message.textContent="Check preparation failed: "+error.message;checks.appendChild(message);setPentestStatus("error");}}
+
+function renderExecutions(executions){const body=$("#pentestexecutions");body.innerHTML="";
+  if(!executions.length){body.innerHTML='<tr><td class="empty" colspan="6">No engine execution records.</td></tr>';return;}
+  for(const execution of executions){const row=document.createElement("tr");appendCell(row,execution.engine);appendCell(row,execution.status);
+    appendCell(row,String(execution.checks_run||0));appendCell(row,String(execution.findings||0));appendCell(row,`${execution.duration_seconds||0}s`);
+    appendCell(row,execution.note||execution.stderr||"—");body.appendChild(row);}}
+
+async function startPentest(){if(!lastWanRecon||lastWanRecon.sample_data)return;
+  const engines=[...document.querySelectorAll('.engineitem input[type="checkbox"]')].filter(input=>input.checked&&!input.disabled).map(input=>input.value);
+  const selected=[...document.querySelectorAll(".pentestcheck")].filter(input=>input.checked&&!input.disabled).map(input=>input.value);
+  if(!engines.length||!selected.length){$("#pentestnotes").textContent="Select at least one available engine and applicable check.";return;}
+  pentestJobId=`pentest-${Date.now()}-${Math.random().toString(16).slice(2)}`;setPentestStatus("running");
+  $("#penteststart").disabled=true;$("#penteststop").disabled=false;$("#pentestnotes").textContent="Running selected non-destructive checks…";
+  try{const result=await postJson("/api/pentest-run",{
+      target:lastWanRecon.target,recon:lastWanRecon,engines,selected_checks:selected,
+      manufacturer:$("#wanmanufacturer").value.trim(),model:$("#wanmodel").value.trim(),interface:$("#waninterface").value,job_id:pentestJobId,
+    });
+    if(result.error)throw new Error(result.detail||result.error);setPentestStatus(result.status||"completed");renderExecutions(result.executions||[]);
+    pentestHasRun=true;unifiedFindings=[...(result.findings||[]),...credentialFindings,...niktoFindings];renderUnifiedFindings();$("#pentestfindingcount").textContent=String(unifiedFindings.length);
+    $("#pentestnotes").textContent=result.stopped?"Execution stopped by user.":"Selected engine checks completed. Open Findings to review evidence.";
+  }catch(error){setPentestStatus("error");$("#pentestnotes").textContent="Pentest error: "+error.message;}
+  finally{pentestJobId=null;$("#penteststop").disabled=true;syncPentestChecks();}}
+
+async function stopPentest(){if(!pentestJobId)return;$("#penteststop").disabled=true;
+  try{await api("/api/pentest-cancel",{job_id:pentestJobId});$("#pentestnotes").textContent="Stopping the active scanner process…";}
+  catch(error){$("#pentestnotes").textContent="Stop request failed: "+error.message;}}
+
+function setNiktoStatus(status){const el=$("#niktostatus");el.textContent=status;
+  el.className="statuspill "+(["idle","running","completed","incomplete","cancelled","error"].includes(status)?status:"idle");}
+
+const niktoCategoryNames={"0":"File Upload","1":"Interesting Files","2":"Misconfiguration / Default Files","3":"Information Disclosure",
+  "4":"Injection","5":"Remote File Retrieval (Web Root)","6":"Denial of Service","7":"Remote File Retrieval (Server Wide)",
+  "8":"Command Execution","9":"SQL Injection","a":"Authentication Bypass","b":"Software Identification","c":"Remote Source Inclusion"};
+
+function selectedNiktoCategories(){return [...document.querySelectorAll(".nikto-category:checked")].map(input=>input.value);}
+
+function refreshNiktoSummary(){const selected=selectedNiktoCategories(),target=$("#niktotarget").value.trim()||"TARGET_IP";
+  const protocol=$("#niktoprotocol").value,port=Number($("#niktoport").value)||(protocol==="https"?443:80),tuning=selected.join("");
+  const urlHost=target.includes(":")?`[${target}]`:target,executable=niktoConfig?.executable||"nikto";
+  $("#niktoselected").textContent=selected.length?`Selected: ${selected.map(code=>`${code} · ${niktoCategoryNames[code]}`).join(", ")}`:"Select at least one category.";
+  $("#niktocommand").textContent=`${executable} -h ${protocol}://${urlHost}:${port} -Tuning ${tuning||"<required>"} -timeout 3`;
+  const count=selected.length;$("#niktodurationwarning").textContent=!count?"Select at least one test category.":count<=3?
+    "Selected checks may take several minutes depending on target response times.":count<=7?
+    "Extended scan selected. More HTTP requests will be generated, and the scan may take significantly longer.":
+    "Large scan selected. This configuration may generate thousands of requests and take a considerable amount of time.";
+  const dos=selected.includes("6"),commandExecution=selected.includes("8");
+  $("#niktodoswarning").classList.toggle("hidden",!dos);$("#niktodosconfirm").classList.toggle("hidden",!dos);
+  $("#niktocommandwarning").classList.toggle("hidden",!commandExecution);
+  if(!dos)$("#niktodosauthorized").checked=false;
+}
+
+function syncNiktoControls(){refreshNiktoSummary();const target=$("#niktotarget").value.trim(),port=Number($("#niktoport").value),selected=selectedNiktoCategories();
+  const disruptiveReady=!selected.includes("6")||$("#niktodosauthorized").checked;
+  const compatible=niktoConfig?.api_version===2;
+  $("#niktostart").disabled=!!niktoJobId||!compatible||!niktoConfig?.available||!validIpAddress(target)||port<1||port>65535||!selected.length||!disruptiveReady;}
+
+function startNiktoClock(){if(niktoClock)clearInterval(niktoClock);niktoStartedAt=Date.now();$("#niktoduration").textContent="0.0s";
+  niktoClock=setInterval(()=>{$("#niktoduration").textContent=`${((Date.now()-niktoStartedAt)/1000).toFixed(1)}s`;},250);}
+
+function stopNiktoClock(duration){if(niktoClock)clearInterval(niktoClock);niktoClock=null;
+  if(duration!=null)$("#niktoduration").textContent=`${duration}s`;}
+
+async function prepareNikto(){if(niktoJobId)return;
+  const current=$("#niktotarget").value.trim();
+  if(lastWanRecon?.target&&(!current||current===niktoReconTarget)){$("#niktotarget").value=lastWanRecon.target;niktoReconTarget=lastWanRecon.target;}
+  try{niktoConfig=await api("/api/nikto-options",{v:2,t:Date.now()});
+    if(niktoConfig.api_version!==2){setNiktoStatus("error");$("#niktonotes").textContent="Stale Nikto backend detected. Restart weaknd before scanning; the displayed command is only a UI preview.";}
+    else if(!niktoConfig.available)$("#niktonotes").textContent="Nikto executable was not found in the server PATH.";
+    else $("#niktonotes").textContent="Ready. No fixed total duration is enforced; use Stop Scan if needed. HTTP security headers remain informational observations.";
+  }catch(error){niktoConfig=null;$("#niktonotes").textContent="Nikto setup failed: "+error.message;}
+  syncNiktoControls();}
+
+function configureNiktoProtocol(){const protocol=$("#niktoprotocol").value,current=Number($("#niktoport").value);
+  if(current===80||current===443||!current)$("#niktoport").value=protocol==="https"?"443":"80";syncNiktoControls();}
+
+async function startNikto(){syncNiktoControls();if($("#niktostart").disabled)return;
+  niktoJobId=globalThis.crypto?.randomUUID?`nikto-${crypto.randomUUID()}`:`nikto-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const payload={target:$("#niktotarget").value.trim(),protocol:$("#niktoprotocol").value,port:Number($("#niktoport").value),
+    categories:selectedNiktoCategories(),disruptive_confirmed:$("#niktodosauthorized").checked,job_id:niktoJobId};
+  niktoFindings=[];unifiedFindings=unifiedFindings.filter(item=>item.detection_engine!=="Nikto");renderUnifiedFindings();
+  setNiktoStatus("running");$("#niktostart").disabled=true;$("#niktostop").disabled=false;$("#niktoresult").textContent="running";
+  $("#niktofindingcount").textContent="0";$("#niktooutput").textContent="Nikto scan running…";startNiktoClock();
+  $("#niktonotes").textContent="Running the selected Nikto categories. Output will appear when the process completes or is stopped.";
+  try{const result=await postJson("/api/nikto-run",payload);if(result.error)throw new Error(result.detail||result.error);
+    setNiktoStatus(result.status||"completed");$("#niktoresult").textContent=result.final_result||"Inconclusive";
+    $("#niktofindingcount").textContent=String((result.findings||[]).length);stopNiktoClock(result.duration_seconds||0);
+    const stdout=result.output||"",stderr=(result.stderr||"").trim();
+    $("#niktooutput").textContent=[stdout,stderr&&!stdout.includes(stderr)?stderr:""].filter(Boolean).join("\n")||"Nikto produced no output.";
+    niktoFindings=result.findings||[];unifiedFindings=unifiedFindings.filter(item=>item.detection_engine!=="Nikto");unifiedFindings.push(...niktoFindings);renderUnifiedFindings();
+    const observations=(result.observations||[]).length,scanMeta=result.scan_id?` Scan ID: ${result.scan_id}. PID: ${result.process_id??"—"}.`:"";
+    $("#niktonotes").textContent=(result.status==="incomplete"?"Scan stopped before completion; partial output and evidence were retained.":
+      observations?`${observations} informational observation(s) retained in the scan output; only supported security issues were added to Findings.`:"Review the original Nikto output and WAN Findings.")+scanMeta;
+  }catch(error){setNiktoStatus("error");$("#niktoresult").textContent="Error";$("#niktonotes").textContent="Nikto scan error: "+error.message;}
+  finally{stopNiktoClock();niktoJobId=null;$("#niktostop").disabled=true;syncNiktoControls();}}
+
+async function stopNikto(){if(!niktoJobId)return;$("#niktostop").disabled=true;
+  try{const result=await api("/api/nikto-cancel",{job_id:niktoJobId});
+    $("#niktonotes").textContent=result.cancelled?"Stopping the active Nikto process…":"The Nikto scan had already finished.";}
+  catch(error){$("#niktonotes").textContent="Stop request failed: "+error.message;}}
+
+function setCredentialStatus(status){const el=$("#credentialstatus");el.textContent=status;
+  el.className="statuspill "+(["idle","running","completed","cancelled","error"].includes(status)?status:"idle");}
+
+function selectedDefaultIds(){return [...document.querySelectorAll(".credential-default:checked")].map(input=>input.value);}
+
+function syncCredentialControls(){
+  const defaults=$("#credentialmode").value==="defaults";$("#credentialdefaults").classList.toggle("hidden",!defaults);
+  document.querySelectorAll(".credential-single-field input").forEach(input=>input.disabled=defaults);
+  const executionAllowed=lastWanRecon?!lastWanRecon.sample_data:$("#wanlive").checked;
+  const target=$("#credentialtarget").value.trim(),port=Number($("#credentialport").value);
+  const modeReady=defaults?selectedDefaultIds().length>0:$("#credentialusername").value.trim().length>0;
+  $("#credentialstart").disabled=!!credentialJobId||!credentialConfig?.available||!executionAllowed||
+    !$("#credentialauthorized").checked||!validIpAddress(target)||port<1||port>65535||!modeReady;
+}
+
+function configureCredentialProtocol(){
+  if(!credentialConfig)return;const protocol=$("#credentialprotocol").value;
+  const discovered=(credentialConfig.discovered_services||[]).find(item=>item.protocol===protocol);
+  const configured=(credentialConfig.protocols||[]).find(item=>item.name===protocol);
+  $("#credentialport").value=String(discovered?.port||configured?.default_port||"");
+  $("#credentialnotes").textContent=discovered?
+    (discovered.confirmed?`${protocol.toUpperCase()} positively identified by Recon on ${discovered.port}/tcp. Port remains editable.`:
+    `${protocol.toUpperCase()} is an unverified Recon port-table candidate on ${discovered.port}/tcp. The authentication test will validate protocol reachability.`):
+    `${protocol.toUpperCase()} was not positively identified by Recon. A manual port is allowed, but service presence is unconfirmed.`;
+  syncCredentialControls();
+}
+
+async function prepareCredentialTesting(){
+  if(credentialJobId)return;
+  if(credentialConfig&&credentialPreparedRecon===lastWanRecon){syncCredentialControls();return;}
+  const current=$("#credentialtarget").value.trim();
+  if(lastWanRecon?.target&&(!current||current===credentialReconTarget)){$("#credentialtarget").value=lastWanRecon.target;credentialReconTarget=lastWanRecon.target;}
+  try{const result=await postJson("/api/credential-options",{recon:lastWanRecon||{}});
+    if(result.error)throw new Error(result.detail||result.error);credentialConfig=result;credentialPreparedRecon=lastWanRecon;
+    const discovered=new Map((result.discovered_services||[]).map(item=>[item.protocol,item]));
+    const select=$("#credentialprotocol"),selected=select.value;select.innerHTML="";
+    for(const item of (result.protocols||[])){const option=document.createElement("option");option.value=item.name;
+      const service=discovered.get(item.name);option.textContent=item.name.toUpperCase()+(service?` · discovered ${service.port}/tcp`:" · manual");select.appendChild(option);}
+    if([...select.options].some(option=>option.value===selected))select.value=selected;
+    else if(discovered.size)select.value=discovered.keys().next().value;
+    const choices=$("#credentialoptions");choices.innerHTML="";
+    for(const item of (result.default_credentials||[])){const label=document.createElement("label");label.className="credentialoption";
+      const input=document.createElement("input");input.type="checkbox";input.className="credential-default";input.value=item.id;
+      const text=document.createElement("span");text.textContent=item.label;label.append(input,text);choices.appendChild(label);
+      input.addEventListener("change",()=>{const maximum=credentialConfig?.max_default_attempts||3;
+        if(selectedDefaultIds().length>maximum){input.checked=false;$("#credentialnotes").textContent=`Select no more than ${maximum} reviewed defaults.`;}syncCredentialControls();});}
+    configureCredentialProtocol();
+  }catch(error){credentialConfig=null;$("#credentialnotes").textContent="Credential Testing setup failed: "+error.message;syncCredentialControls();}
+}
+
+function renderCredentialResult(result){
+  setCredentialStatus(result.status||"completed");$("#credentialattempted").textContent=String(result.attempted_credentials||0);
+  $("#credentialsuccessful").textContent=String(result.successful_authentications||0);$("#credentialfailed").textContent=String(result.failed_authentications||0);
+  $("#credentialduration").textContent=`${result.duration_seconds||0}s`;$("#credentialfinal").textContent=result.final_result||"Inconclusive";
+  const body=$("#credentialattempts");body.innerHTML="";const attempts=result.attempts||[];
+  if(!attempts.length)body.innerHTML='<tr><td class="empty" colspan="5">No credential attempt completed.</td></tr>';
+  for(const attempt of attempts){const row=document.createElement("tr");appendCell(row,attempt.username);appendCell(row,attempt.credential_reference);
+    appendCell(row,String(attempt.status||"inconclusive").replaceAll("_"," "));appendCell(row,`${attempt.duration_seconds||0}s`);appendCell(row,attempt.evidence);body.appendChild(row);}
+  const notes=[result.evidence];if(result.stopped_on_success)notes.push("Stopped after successful authentication.");
+  if(result.stopped_on_rate_limit)notes.push("Stopped because lockout or rate limiting was indicated.");
+  notes.push("Passwords were omitted from the result, artifact, and finding.");$("#credentialnotes").textContent=notes.filter(Boolean).join(" ");
+  if(result.finding){credentialFindings=credentialFindings.filter(item=>item.finding_id!==result.finding.finding_id);credentialFindings.push(result.finding);
+    unifiedFindings=unifiedFindings.filter(item=>item.detection_engine!==result.finding.detection_engine);unifiedFindings.push(...credentialFindings);renderUnifiedFindings();}
+}
+
+async function startCredentialTest(){
+  syncCredentialControls();if($("#credentialstart").disabled)return;
+  const mode=$("#credentialmode").value,password=$("#credentialpassword").value;
+  const payload={target:$("#credentialtarget").value.trim(),recon:lastWanRecon||{},protocol:$("#credentialprotocol").value,
+    port:Number($("#credentialport").value),mode,username:$("#credentialusername").value.trim(),
+    password,selected_default_ids:selectedDefaultIds(),authorized:$("#credentialauthorized").checked};
+  $("#credentialpassword").value="";credentialJobId=`credential-${Date.now()}-${Math.random().toString(16).slice(2)}`;payload.job_id=credentialJobId;
+  setCredentialStatus("running");$("#credentialstart").disabled=true;$("#credentialstop").disabled=false;$("#credentialfinal").textContent="running";
+  $("#credentialnotes").textContent="Running bounded sequential authentication checks with one worker…";
+  try{const result=await postJson("/api/credential-run",payload);if(result.error)throw new Error(result.detail||result.error);renderCredentialResult(result);}
+  catch(error){setCredentialStatus("error");$("#credentialfinal").textContent="Inconclusive";$("#credentialnotes").textContent="Credential test error: "+error.message;}
+  finally{credentialJobId=null;$("#credentialstop").disabled=true;syncCredentialControls();}
+}
+
+async function stopCredentialTest(){if(!credentialJobId)return;$("#credentialstop").disabled=true;
+  try{const result=await api("/api/credential-cancel",{job_id:credentialJobId});
+    $("#credentialnotes").textContent=result.cancelled?"Stopping the current authentication attempt…":"The credential test had already finished.";}
+  catch(error){$("#credentialnotes").textContent="Stop request failed: "+error.message;}}
+
+function showFindingDetail(finding,selector="#findingdetail"){const detail=$(selector);detail.innerHTML="";detail.classList.remove("hidden");
+  const title=document.createElement("h4");title.textContent=finding.title;detail.appendChild(title);
+  const fields=[
+    ["Technical description",finding.description],["Original evidence",finding.evidence],
+    ["Detection method",`${finding.detection_engine} · ${finding.test_identifier}`],
+    ["Validation status",finding.validation_status],["Recommended remediation",finding.remediation],
+    ["Target",`${finding.target_ip}${finding.port?":"+finding.port:""} · ${finding.protocol||"—"} · ${finding.service||"—"}`],
+    ["Reference",finding.reference||"—"],["Timestamp",finding.timestamp||"—"],
+  ];
+  for(const [label,value] of fields){const heading=document.createElement("div");heading.className="label";heading.textContent=label;
+    const content=document.createElement("pre");content.textContent=value||"—";detail.append(heading,content);}}
+
+function renderUnifiedFindings(){const body=$("#unifiedfindings");body.innerHTML="";$("#findingdetail").classList.add("hidden");
+  $("#findingsexport").disabled=!unifiedFindings.length;$("#pentestfindingcount").textContent=String(unifiedFindings.length);
+  if(!unifiedFindings.length){body.innerHTML='<tr><td class="empty" colspan="6">No normalized findings available.</td></tr>';return;}
+  for(const finding of unifiedFindings){const row=document.createElement("tr");row.className="findingrow";appendCell(row,finding.title);
+    const severity=document.createElement("td"),badge=document.createElement("span");badge.className="sev "+(finding.severity||"INFO").toUpperCase();badge.textContent=(finding.severity||"INFO").toUpperCase();severity.appendChild(badge);row.appendChild(severity);
+    appendCell(row,[finding.service,finding.port?`${finding.port}/${finding.protocol}`:null].filter(Boolean).join(" · ")||"—");appendCell(row,finding.detection_engine);
+    appendCell(row,finding.reference||"—");appendCell(row,finding.validation_status);row.addEventListener("click",()=>{
+      document.querySelectorAll(".findingrow").forEach(item=>item.classList.remove("selected"));row.classList.add("selected");showFindingDetail(finding);});body.appendChild(row);}}
+
+function renderLanFindings(){const body=$("#lanunifiedfindings");body.innerHTML="";$("#lanfindingdetail").classList.add("hidden");
+  $("#lanfindingcount").textContent=String(lanFindings.length);$("#lanfindingsexport").disabled=!lanFindings.length;
+  if(!lanFindings.length){body.innerHTML='<tr><td class="empty" colspan="6">Run LAN Audit to populate findings.</td></tr>';return;}
+  for(const finding of lanFindings){const row=document.createElement("tr");row.className="findingrow";appendCell(row,finding.title);
+    const severity=document.createElement("td"),badge=document.createElement("span");badge.className="sev "+(finding.severity||"INFO").toUpperCase();badge.textContent=(finding.severity||"INFO").toUpperCase();severity.appendChild(badge);row.appendChild(severity);
+    appendCell(row,[finding.service,finding.port?`${finding.port}/${finding.protocol}`:null].filter(Boolean).join(" · ")||"—");appendCell(row,finding.detection_engine);
+    appendCell(row,finding.reference||"—");appendCell(row,finding.validation_status);row.addEventListener("click",()=>{
+      document.querySelectorAll("#lanunifiedfindings .findingrow").forEach(item=>item.classList.remove("selected"));row.classList.add("selected");showFindingDetail(finding,"#lanfindingdetail");});body.appendChild(row);}}
+
+function escapeReportHtml(value){return String(value??"—").replaceAll("&","&amp;").replaceAll("<","&lt;")
+  .replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#39;");}
+
+function findingsReportHtml(findings,auditType){const generated=new Date().toLocaleString();
+  const rows=findings.map(finding=>{const severity=String(finding.severity||"INFO").toUpperCase();
+    const tone=["CRITICAL","HIGH","MEDIUM","LOW","INFO"].includes(severity)?severity:"INFO";
+    const target=[finding.target_ip,finding.port?`:${finding.port}`:null].filter(Boolean).join("");
+    const service=[finding.service,finding.protocol].filter(Boolean).join(" / ");
+    return `<tr><td><strong>${escapeReportHtml(finding.title)}</strong></td><td><span class="sev ${tone}">${escapeReportHtml(severity)}</span></td>`+
+      `<td>${escapeReportHtml(target||"—")}<small>${escapeReportHtml(service||"—")}</small></td>`+
+      `<td>${escapeReportHtml(finding.detection_engine)}</td><td>${escapeReportHtml(finding.validation_status)}</td>`+
+      `<td>${escapeReportHtml(finding.description||"—")}</td></tr>`;}).join("");
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">`+
+    `<title>weaknd · ${escapeReportHtml(auditType)} Findings</title><style>`+
+    `:root{--bg:#0a0e14;--panel:#0f141c;--line:#1e2733;--fg:#d7e0ea;--dim:#6b7a8d;--green:#3ad17f;--cyan:#35c6e8;--warn:#f0b429;--red:#ff5f6d}`+
+    `*{box-sizing:border-box}body{margin:0;padding:32px;background:var(--bg);color:var(--fg);font:14px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}`+
+    `.wrap{max-width:1180px;margin:auto}.head{display:flex;align-items:flex-end;gap:20px;border-bottom:1px solid var(--line);padding-bottom:18px;margin-bottom:22px}`+
+    `.logo{font-size:28px;font-weight:800}.logo span{color:var(--green)}h1{font-size:17px;margin:0 0 4px;color:var(--cyan)}.meta{color:var(--dim);font-size:11px}`+
+    `.summary{margin-left:auto;color:var(--dim)}.summary b{color:var(--green);font-size:20px}table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line)}`+
+    `th{text-align:left;color:var(--dim);font-size:10px;text-transform:uppercase;padding:10px;border-bottom:1px solid var(--line)}td{padding:12px 10px;border-bottom:1px solid var(--line);vertical-align:top;line-height:1.45}`+
+    `td small{display:block;color:var(--dim);margin-top:4px}.sev{display:inline-block;font-size:10px;font-weight:800;padding:3px 7px;border-radius:10px}.sev.CRITICAL{color:var(--red);border:1px solid var(--red)}`+
+    `.sev.HIGH{color:var(--warn);border:1px solid var(--warn)}.sev.MEDIUM{color:var(--cyan);border:1px solid var(--cyan)}.sev.LOW{color:#8fb8c6;border:1px solid #355866}.sev.INFO{color:var(--dim);background:#1a2430}`+
+    `@media(max-width:760px){body{padding:14px}.head{align-items:flex-start;flex-direction:column}.summary{margin-left:0}table{font-size:12px}}@media print{body{background:white;color:#111}.head,table,th,td{border-color:#ccc}table{background:white}.meta,.summary,th,td small{color:#555}}`+
+    `</style></head><body><div class="wrap"><div class="head"><div class="logo">weak<span>&amp;</span></div><div><h1>${escapeReportHtml(auditType)} Findings</h1>`+
+    `<div class="meta">Generated ${escapeReportHtml(generated)}</div></div><div class="summary"><b>${findings.length}</b> finding(s)</div></div>`+
+    `<table><thead><tr><th>Finding</th><th>Severity</th><th>Target / Service</th><th>Engine</th><th>Status</th><th>Summary</th></tr></thead><tbody>${rows}</tbody></table>`+
+    `</div></body></html>`;}
+
+function downloadFindingsHtml(findings,auditType){if(!findings.length)return;
+  const blob=new Blob([findingsReportHtml(findings,auditType)],{type:"text/html;charset=utf-8"});
+  const url=URL.createObjectURL(blob),link=document.createElement("a");link.href=url;
+  const slug=auditType.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
+  link.download=`weaknd-${slug}-findings-${Date.now()}.html`;link.click();URL.revokeObjectURL(url);}
+
+function exportFindings(){downloadFindingsHtml(unifiedFindings,"WAN Audit");}
+function exportLanFindings(){downloadFindingsHtml(lanFindings,"LAN Audit");}
+
+document.querySelectorAll(".tabbtn").forEach(button=>button.addEventListener("click",()=>{
+  document.querySelectorAll(".tabbtn").forEach(item=>item.classList.toggle("active",item===button));
+  document.querySelectorAll(".tabview").forEach(view=>view.classList.toggle("active",view.id===button.dataset.tab));
+  $("#mode").textContent=button.dataset.tab==="wanview"?"WAN AUDIT":"LAN AUDIT";
+}));
+document.querySelectorAll(".lansubtab").forEach(button=>button.addEventListener("click",()=>{
+  document.querySelectorAll(".lansubtab").forEach(item=>item.classList.toggle("active",item===button));
+  document.querySelectorAll(".lanpanel").forEach(panel=>panel.classList.toggle("active",panel.id===button.dataset.lanpanel));
+}));
+document.querySelectorAll(".wansubtab").forEach(button=>button.addEventListener("click",()=>{
+  document.querySelectorAll(".wansubtab").forEach(item=>item.classList.toggle("active",item===button));
+  document.querySelectorAll(".wanpanel").forEach(panel=>panel.classList.toggle("active",panel.id===button.dataset.wanpanel));
+  if(button.dataset.wanpanel==="wanpentest")preparePentest();
+}));
+document.querySelectorAll(".pentesttooltab").forEach(button=>button.addEventListener("click",()=>{
+  document.querySelectorAll(".pentesttooltab").forEach(item=>item.classList.toggle("active",item===button));
+  document.querySelectorAll(".pentesttoolpanel").forEach(panel=>panel.classList.toggle("active",panel.id===button.dataset.pentesttool));
+  if(button.dataset.pentesttool==="pentestniktoview")prepareNikto();
+}));
+for(const engine of ["nmap","nuclei"]){$("#engine-"+engine).addEventListener("change",syncPentestChecks);}
+$("#wanlive").addEventListener("change",()=>{$("#wanmodetext").textContent=$("#wanlive").checked?"Live Scan":"Demo Mode";syncCredentialControls();});
+$("#wanstart").addEventListener("click",startWanScan);
+$("#wancancel").addEventListener("click",cancelWanScan);
+$("#penteststart").addEventListener("click",startPentest);
+$("#penteststop").addEventListener("click",stopPentest);
+$("#niktostart").addEventListener("click",startNikto);
+$("#niktostop").addEventListener("click",stopNikto);
+$("#niktoprotocol").addEventListener("change",configureNiktoProtocol);
+$("#niktotarget").addEventListener("input",syncNiktoControls);
+$("#niktoport").addEventListener("input",syncNiktoControls);
+document.querySelectorAll(".nikto-category").forEach(input=>input.addEventListener("change",syncNiktoControls));
+$("#niktodosauthorized").addEventListener("change",syncNiktoControls);
+$("#credentialstart").addEventListener("click",startCredentialTest);
+$("#credentialstop").addEventListener("click",stopCredentialTest);
+$("#credentialprotocol").addEventListener("change",configureCredentialProtocol);
+$("#credentialmode").addEventListener("change",syncCredentialControls);
+$("#credentialtarget").addEventListener("input",syncCredentialControls);
+$("#credentialport").addEventListener("input",syncCredentialControls);
+$("#credentialusername").addEventListener("input",syncCredentialControls);
+$("#credentialauthorized").addEventListener("change",syncCredentialControls);
+$("#findingsexport").addEventListener("click",exportFindings);
+$("#lanfindingsexport").addEventListener("click",exportLanFindings);
+$("#discover").addEventListener("click",discoverNetwork);
+$("#loadlast").addEventListener("click",loadLatestLan);
+$("#run").addEventListener("click",run);
+document.addEventListener("keydown",e=>{if(e.key==="Enter"&&document.activeElement.id==="host")run();});
+log("weaknd ready — DISCOVER LAN → select host → RUN LAN AUDIT → Findings","mut");
+loadWanInterfaces();
+loadLatestLan();
+</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+# Local Python environment
+env/
+.venv/
+__pycache__/
+*.pyc
+
+# Generated scan evidence (local runtime output, not source)
+artifacts/
+
+# Sensitive device inventory and investigation notes
+# (contain real MAC addresses, serial numbers, and deployment identity)
+data/device_inventory.csv
+findings/
+
+# Misc local logs
+routersploit.log
